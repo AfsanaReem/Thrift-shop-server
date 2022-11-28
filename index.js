@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const stripe = require("stripe")(process.env.STRIPE_SK);
+// const stripe = require("stripe")(process.env.STRIPE_SK);
 require('dotenv').config();
 //middleware
 app.use(cors());
@@ -17,6 +17,15 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 
 async function run() {
     try {
+        const usersCollection = client.db('thriftShopDb').collection('users')
+        const productsCollection = client.db('thriftShopDb').collection('products')
+
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+
 
     }
     finally {
