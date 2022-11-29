@@ -33,6 +33,7 @@ async function run() {
     try {
         const usersCollection = client.db('thriftShopDb').collection('users')
         const productsCollection = client.db('thriftShopDb').collection('products')
+        const bookingsCollection = client.db('thriftShopDb').collection('bookings')
 
         app.get('/jwt', async (req, res) => {
             const email = req.query.email;
@@ -61,20 +62,49 @@ async function run() {
             const result = await usersCollection.find(query).toArray();
             res.send(result)
         })
+
         app.get('/users/buyer', async (req, res) => {
             const query = { role: 'Buyer' }
             const result = await usersCollection.find(query).toArray();
             res.send(result)
         })
+
         app.get('/users/seller', async (req, res) => {
             const query = { role: 'Seller' }
             const result = await usersCollection.find(query).toArray();
             res.send(result)
         })
 
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            res.send({ isAdmin: user?.role === 'Admin' });
+        })
+
+        app.get('/users/seller/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            res.send({ isSeller: user?.role === 'Seller' });
+        })
+
+        app.get('/users/buyer/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            res.send({ isBuyer: user?.role === 'Buyer' });
+        })
+
         app.post('/products', async (req, res) => {
             const product = req.body;
             const result = await productsCollection.insertOne(product);
+            res.send(result);
+        })
+
+        app.post('/bookings', async (req, res) => {
+            const product = req.body;
+            const result = await bookingsCollection.insertOne(product);
             res.send(result);
         })
 
@@ -86,7 +116,7 @@ async function run() {
         })
 
         app.get('/products/advertised', async (req, res) => {
-            const query = { advertised: true }
+            const query = { advertised: true, sold: false }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
         })
@@ -120,6 +150,19 @@ async function run() {
             const updatedDoc = {
                 $set: {
                     advertised: true
+                }
+            }
+            const result = await productsCollection.updateOne(filter, updatedDoc, option);
+            res.send(result);
+        })
+
+        app.put('/products/sold/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: ObjectId(id) }
+            const option = { upsert: true }
+            const updatedDoc = {
+                $set: {
+                    sold: true
                 }
             }
             const result = await productsCollection.updateOne(filter, updatedDoc, option);
