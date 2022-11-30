@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-// const stripe = require("stripe")(process.env.STRIPE_SK);
+const stripe = require("stripe")(process.env.STRIPE_SK);
 require('dotenv').config();
 //middleware
 app.use(cors());
@@ -34,6 +34,7 @@ async function run() {
         const usersCollection = client.db('thriftShopDb').collection('users')
         const productsCollection = client.db('thriftShopDb').collection('products')
         const bookingsCollection = client.db('thriftShopDb').collection('bookings')
+        const paymentsCollection = client.db('thriftShopDb').collection('payments')
 
         //Note: use verifyAdmin after verifyJWT
         const verifyAdmin = async (req, res, next) => {
@@ -78,9 +79,10 @@ async function run() {
             res.send(result);
         })
 
-        app.get('/users', async (req, res) => {
-            const query = {};
-            const result = await usersCollection.find(query).toArray();
+        app.get('/users/:email', async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const result = await usersCollection.findOne(query);
             res.send(result)
         })
 
@@ -96,21 +98,21 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/users/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
+        app.get('/users/admin/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
             const user = await usersCollection.findOne(query);
             res.send({ isAdmin: user?.role === 'Admin' });
         })
 
-        app.get('/users/seller/:email', verifyJWT, verifyAdmin, async (req, res) => {
+        app.get('/users/seller/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
             const user = await usersCollection.findOne(query);
             res.send({ isSeller: user?.role === 'Seller' });
         })
 
-        app.get('/users/buyer/:email', verifyJWT, verifyAdmin, async (req, res) => {
+        app.get('/users/buyer/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
             const user = await usersCollection.findOne(query);
@@ -142,36 +144,43 @@ async function run() {
             res.send(result);
         })
 
-        app.get('/bookings', verifyJWT, async (req, res) => {
+        app.get('/bookings', async (req, res) => {
             const email = req.query.email;
             const query = { email: email }
             const result = await bookingsCollection.find(query).toArray();
             res.send(result);
         })
 
-        app.get('/products', verifyJWT, async (req, res) => {
+        app.get('/bookings/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await bookingsCollection.findOne(query);
+            res.send(result);
+        })
+
+        app.get('/products', async (req, res) => {
             const email = req.query.email;
             const query = { email: email }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
         })
 
-        app.get('/products/advertised', verifyJWT, async (req, res) => {
+        app.get('/products/advertised', async (req, res) => {
             const query = { advertised: true, sold: false, paid: false }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
         })
-        app.get('/products/mens', verifyJWT, async (req, res) => {
+        app.get('/products/mens', async (req, res) => {
             const query = { category: 'Men' }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
         })
-        app.get('/products/womens', verifyJWT, async (req, res) => {
+        app.get('/products/womens', async (req, res) => {
             const query = { category: 'Women' }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
         })
-        app.get('/products/kids', verifyJWT, async (req, res) => {
+        app.get('/products/kids', async (req, res) => {
             const query = { category: 'Kids' }
             const result = await productsCollection.find(query).toArray();
             res.send(result);
@@ -240,6 +249,39 @@ async function run() {
                 }
             }
             const result = await productsCollection.updateOne(filter, updatedDoc, option);
+            res.send(result);
+        })
+
+        //stripe
+        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+            const booking = req.body;
+            const price = booking.price;
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntent.create({
+                currency: 'usd',
+                amount: amount,
+                "payment_method_types": [
+                    "card"
+                ]
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            })
+        })
+
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const result = await paymentsCollection.insertOne(payment);
+            const id = payment.bookingId
+            const filter = { _id: ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: payment.transactionId
+                }
+            }
+            const paidResult = await bookingsCollection.updateOne(filter, updatedDoc)
             res.send(result);
         })
 
